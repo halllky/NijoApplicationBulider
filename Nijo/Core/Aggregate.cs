@@ -159,5 +159,24 @@ namespace Nijo.Core {
                             && edge.Initial.Item is Aggregate)
                 .Select(edge => edge.As<Aggregate>());
         }
+        /// <summary>
+        /// この集約を参照し、かつそれが参照元集約の唯一のキーであるものを列挙する
+        /// </summary>
+        internal static IEnumerable<GraphEdge<Aggregate>> GetReferedEdgesAsSingleKey(this GraphNode<Aggregate> target) {
+            var refered = target.GetReferedEdges();
+            foreach (var edge in refered) {
+                var source = edge.Initial;
+                var keys = source
+                    .GetKeys()
+                    .Where(key => key.DeclaringAggregate == source)
+                    .ToArray();
+
+                if (keys.Length == 1
+                    && keys[0] is AggregateMember.Ref rm
+                    && rm.MemberAggregate == target) {
+                    yield return edge;
+                }
+            }
+        }
     }
 }
