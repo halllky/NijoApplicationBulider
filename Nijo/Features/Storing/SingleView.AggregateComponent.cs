@@ -46,6 +46,17 @@ namespace Nijo.Features.Storing {
             var useFormType = $"AggregateType.{_aggregate.GetEntry().As<Aggregate>().Item.TypeScriptTypeName}";
             var registerName = GetRegisterName();
 
+            // この集約を参照する隣接集約
+            var relevantAggregates = _aggregate
+                .GetReferedEdgesAsSingleKey();
+            var relevantAggregatesCalling = relevantAggregates
+                .SelectTextTemplate(edge =>  $$"""
+                    <VForm.Spacer />
+                    <VForm.Section label="{{edge.Initial.Item.DisplayName}}" table>
+                      {{WithIndent(new AggregateComponent(edge.Initial, _mode).RenderCaller(), "  ")}}
+                    </VForm.Section>
+                    """);
+
             if (_relationToParent == null) {
                 // ルート集約のレンダリング
                 return $$"""
@@ -60,6 +71,7 @@ namespace Nijo.Features.Storing {
                       return (
                         <>
                           {{WithIndent(RenderMembers(), "      ")}}
+                          {{WithIndent(relevantAggregatesCalling, "      ")}}
                         </>
                       )
                     }
@@ -79,6 +91,7 @@ namespace Nijo.Features.Storing {
                       return (
                         <>
                           {{WithIndent(RenderMembers(), "      ")}}
+                          {{WithIndent(relevantAggregatesCalling, "      ")}}
                         </>
                       )
                     }
@@ -100,6 +113,7 @@ namespace Nijo.Features.Storing {
                       const body = (
                         <>
                           {{WithIndent(RenderMembers(), "      ")}}
+                          {{WithIndent(relevantAggregatesCalling, "      ")}}
                         </>
                       )
 
@@ -175,6 +189,11 @@ namespace Nijo.Features.Storing {
                                     </VForm.Row>
                     """)}}
                                   </VForm.Section>
+                    {{relevantAggregates.SelectTextTemplate(edge => $$"""
+                                  <VForm.Section label="{{edge.RelationName}}" table>
+                                    {{WithIndent(new AggregateComponent(edge.Initial, _mode).RenderCaller(), "  ")}}
+                                  </VForm.Section>
+                    """)}}
                                 </VForm.Root>
                               )}
                             </Layout.TabGroup>
@@ -192,8 +211,7 @@ namespace Nijo.Features.Storing {
 
                 var colMembers = new List<AggregateMember.AggregateMemberBase>();
                 colMembers.AddRange(GetMembers());
-                colMembers.AddRange(_aggregate
-                    .GetReferedEdgesAsSingleKeyRecursively()
+                colMembers.AddRange(relevantAggregates
                     .SelectMany(edge => new AggregateDetail(edge.Initial).GetOwnMembers())
                     .Where(member => member is not AggregateMember.Ref rm
                                   || !rm.Relation.IsPrimary()));
@@ -348,7 +366,16 @@ namespace Nijo.Features.Storing {
         }
 
         private string RenderProperty(AggregateMember.Ref refProperty) {
-            if (_mode == SingleView.E_Type.View) {
+            if (_aggregate != _aggregate.GetEntry().As<Aggregate>()) {
+                // このコンポーネントが参照先集約のSingleViewの一部としてレンダリングされている場合、
+                // キーがどの参照先データかは自明のため、非表示にする。
+                return $$"""
+                    <VForm.Row hidden>
+                      <input type="hidden" {...register({{GetRegisterName(refProperty)}})} />
+                    </VForm.Row>
+                    """;
+
+            } else if (_mode == SingleView.E_Type.View) {
                 // リンク
                 var singleView = new SingleView(refProperty.MemberAggregate.GetRoot(), SingleView.E_Type.View);
                 var linkKeys = refProperty.MemberAggregate
@@ -421,7 +448,17 @@ namespace Nijo.Features.Storing {
 
         #region 部品
         private string GetComponentName() {
-            return $"{_aggregate.Item.TypeScriptTypeName}View";
+            var entry = _aggregate.GetEntry().As<Aggregate>();
+            if (_aggregate.IsInTreeOf(entry)) {
+                return $"{_aggregate.Item.TypeScriptTypeName}View";
+
+            } else {
+                var path = _aggregate
+                    .PathFromEntry()
+                    .Select(edge => edge.RelationName.ToCSharpSafe())
+                    .Join("_");
+                return $"{path}_{_aggregate.Item.TypeScriptTypeName}View";
+            }
         }
 
         private IReadOnlyList<string> GetArguments() {

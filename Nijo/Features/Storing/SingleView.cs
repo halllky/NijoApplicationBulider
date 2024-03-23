@@ -155,11 +155,16 @@ namespace Nijo.Features.Storing {
 
                 // -----------------------------------------
                 // 集約コンポーネントの宣言
-                var aggregateComponents = new List<AggregateComponent>{
-                    new AggregateComponent(_aggregate, _type),
-                };
-                aggregateComponents.AddRange(_aggregate
-                    .EnumerateThisAndDescendants()
+                var rootAggregateList = new List<GraphNode<Aggregate>> { _aggregate };
+                rootAggregateList.AddRange(_aggregate
+                    .GetReferedEdgesAsSingleKeyRecursively()
+                    .Select(edge => edge.Initial));
+
+                var aggregateComponents = new List<AggregateComponent>();
+                aggregateComponents.AddRange(rootAggregateList
+                    .Select(agg => new AggregateComponent(agg, _type)));
+                aggregateComponents.AddRange(rootAggregateList
+                    .SelectMany(agg => agg.EnumerateThisAndDescendants())
                     .SelectMany(desc => desc.GetMembers())
                     .OfType<AggregateMember.RelationMember>()
                     // RefやParentを除外する
