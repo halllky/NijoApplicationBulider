@@ -45,6 +45,12 @@ namespace Nijo.Features.Storing {
                 .OfType<AggregateMember.ValueMember>()
                 .ToArray();
 
+            var groupedSearchConditions = findMany
+                .EnumerateSearchConditionMembers()
+                .GroupBy(member => member.DeclaringAggregate)
+                // 自身のメンバーを検索条件の先頭に表示する
+                .OrderBy(group => group.Key == _aggregate ? 1 : 2);
+
             var rowHeader = new DataTableColumn {
                 Id = "col0",
                 Header = string.Empty,
@@ -189,23 +195,14 @@ namespace Nijo.Features.Storing {
                                 )}
                               >
                                 <VForm.Section table>
-                    {{findMany.EnumerateSearchConditionMembers().SelectTextTemplate(vm => $$"""
-                                  <VForm.Row label="{{vm.MemberName}}">
-                    {{If(vm is AggregateMember.Variation, () => $$"""
-                    {{FindManyFeature.VariationMemberProps((AggregateMember.Variation)vm).SelectTextTemplate(x => $$"""
-                                    <label className="inline-flex items-center">
-                                      <Input.CheckBox {...registerExCondition(`{{vm.Declared.GetFullPath().SkipLast(1).Concat(new[] { x.Value }).Join(".")}}`)} />
-                                      {{x.Key.MemberName}}
-                                    </label>
-                    """)}}
-                    """).ElseIf(vm.Options.MemberType.SearchBehavior == SearchBehavior.Range, () => $$"""
-                                    <{{vm.Options.MemberType.GetReactComponent(new() { Type = GetReactComponentArgs.E_Type.InDetailView }).Name}} {...registerExCondition(`{{vm.Declared.GetFullPath().Join(".")}}.{{FromTo.FROM}}`)}{{string.Concat(vm.Options.MemberType.GetReactComponent(new() { Type = GetReactComponentArgs.E_Type.InDetailView }).GetPropsStatement())}} />
-                                    ～
-                                    <{{vm.Options.MemberType.GetReactComponent(new() { Type = GetReactComponentArgs.E_Type.InDetailView }).Name}} {...registerExCondition(`{{vm.Declared.GetFullPath().Join(".")}}.{{FromTo.TO}}`)}{{string.Concat(vm.Options.MemberType.GetReactComponent(new() { Type = GetReactComponentArgs.E_Type.InDetailView }).GetPropsStatement())}} />
+                    {{groupedSearchConditions.SelectTextTemplate(group => $$"""
+                    {{If(group.Key == _aggregate, () => $$"""
+                                  {{WithIndent(group.SelectTextTemplate(RenderSearchConditionValueMember), "              ")}}
                     """).Else(() => $$"""
-                                    <{{vm.Options.MemberType.GetReactComponent(new() { Type = GetReactComponentArgs.E_Type.InDetailView }).Name}} {...registerExCondition(`{{vm.Declared.GetFullPath().Join(".")}}`)}{{string.Concat(vm.Options.MemberType.GetReactComponent(new() { Type = GetReactComponentArgs.E_Type.InDetailView }).GetPropsStatement())}} />
+                                  <VForm.Section label="{{group.Key.Item.DisplayName}}">
+                                    {{WithIndent(group.SelectTextTemplate(RenderSearchConditionValueMember), "                ")}}
+                                  </VForm.Section>
                     """)}}
-                                  </VForm.Row>
                     """)}}
                                 </VForm.Section>
                               </VForm.Root>
@@ -243,6 +240,29 @@ namespace Nijo.Features.Storing {
                     }))
                     """,
             };
+        }
+
+        private static string RenderSearchConditionValueMember(AggregateMember.ValueMember vm) {
+            var component = vm.Options.MemberType.GetReactComponent(new() {
+                Type = GetReactComponentArgs.E_Type.InDetailView,
+            });
+
+            return $$"""
+                <VForm.Row label="{{vm.MemberName}}">
+                {{If(vm is AggregateMember.Variation, () => FindManyFeature.VariationMemberProps((AggregateMember.Variation)vm).SelectTextTemplate(x => $$"""
+                  <label className="inline-flex items-center">
+                    <Input.CheckBox {...registerExCondition(`{{vm.Declared.GetFullPath().SkipLast(1).Concat(new[] { x.Value }).Join(".")}}`)} />
+                    {{x.Key.MemberName}}
+                  </label>
+                """)).ElseIf(vm.Options.MemberType.SearchBehavior == SearchBehavior.Range, () => $$"""
+                  <{{component.Name}} {...registerExCondition(`{{vm.Declared.GetFullPath().Join(".")}}.{{FromTo.FROM}}`)}{{string.Concat(component.GetPropsStatement())}} />
+                  <span className="select-none">～</span>
+                  <{{component.Name}} {...registerExCondition(`{{vm.Declared.GetFullPath().Join(".")}}.{{FromTo.TO}}`)}{{string.Concat(component.GetPropsStatement())}} />
+                """).Else(() => $$"""
+                  <{{component.Name}} {...registerExCondition(`{{vm.Declared.GetFullPath().Join(".")}}`)}{{string.Concat(component.GetPropsStatement())}} />
+                """)}}
+                </VForm.Row>
+                """;
         }
     }
 }
