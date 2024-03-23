@@ -60,7 +60,7 @@ namespace Nijo.Features.Storing {
             if (_relationToParent == null) {
                 // ルート集約のレンダリング
                 return $$"""
-                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    const {{componentName}} = ({{{args.Join(", ")}} }: {
                     {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
@@ -80,7 +80,7 @@ namespace Nijo.Features.Storing {
             } else if (_relationToParent is AggregateMember.Child) {
                 // Childのレンダリング
                 return $$"""
-                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    const {{componentName}} = ({{{args.Join(", ")}} }: {
                     {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
@@ -102,7 +102,7 @@ namespace Nijo.Features.Storing {
                 var switchProp = GetRegisterName(_aggregate.GetParent()!.Initial, variation.Group);
 
                 return $$"""
-                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    const {{componentName}} = ({{{args.Join(", ")}} }: {
                     {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
@@ -131,12 +131,12 @@ namespace Nijo.Features.Storing {
                     """;
 
             } else if (!_aggregate.CanDisplayAllMembersAs2DGrid()) {
-                // Childrenのレンダリング（子集約をもつ場合）
+                // Childrenのレンダリング（子集約をもつなど表であらわせない場合）
                 var loopVar = $"index_{args.Length}";
                 var createNewChildrenItem = new TSInitializerFunction(_aggregate).FunctionName;
 
                 return $$"""
-                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    const {{componentName}} = ({{{args.Join(", ")}} }: {
                     {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
@@ -226,7 +226,7 @@ namespace Nijo.Features.Storing {
                         _mode == SingleView.E_Type.View));
 
                 return $$"""
-                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    const {{componentName}} = ({{{args.Join(", ")}} }: {
                     {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
