@@ -58,10 +58,20 @@ namespace Nijo.Features.Storing {
         }
 
         internal virtual string RenderTypeScript(CodeRenderingContext ctx) {
+            var refered = _aggregate
+                .GetReferedEdgesAsSingleKey()
+                .Select(agg => new {
+                    agg.RelationName,
+                    agg.Initial.Item.TypeScriptTypeName,
+                });
+
             return $$"""
                 export type {{_aggregate.Item.TypeScriptTypeName}} = {
                 {{GetOwnMembers().SelectTextTemplate(m => $$"""
                   {{m.MemberName}}?: {{m.TypeScriptTypename}}
+                """)}}
+                {{refered.SelectTextTemplate(x => $$"""
+                  {{x.RelationName}}?: {{x.TypeScriptTypeName}}
                 """)}}
                   {{IS_LOADED}}?: boolean
                   {{OBJECT_ID}}?: string

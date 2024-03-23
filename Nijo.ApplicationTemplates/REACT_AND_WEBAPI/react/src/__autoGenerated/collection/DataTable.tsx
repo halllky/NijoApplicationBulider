@@ -26,10 +26,18 @@ export const DataTable = Util.forwardRefEx(<T,>(props: DataTableProps<T>, ref: R
 
   // 列
   const columnHelper = useMemo(() => RT.createColumnHelper<Tree.TreeNode<T>>(), [])
-  const columns = useMemo(() => {
-    return treeView
-      ? ([getRowHeader(columnHelper, treeView), ...(propsColumns ?? [])])
-      : (propsColumns ?? [])
+  const columns: RT.ColumnDef<Tree.TreeNode<T>>[] = useMemo(() => {
+    const result: RT.ColumnDef<Tree.TreeNode<T>>[] = []
+    if (treeView) result.unshift(getRowHeader(columnHelper, treeView))
+    const colgroups = Util.groupBy(propsColumns ?? [], col => col.headerGroupName ?? '')
+    for (const [header, columns] of colgroups) {
+      if (header) {
+        result.push(columnHelper.group({ header, columns }))
+      } else {
+        result.push(...columns)
+      }
+    }
+    return result
   }, [propsColumns, columnHelper, treeView])
 
   // 表
@@ -144,6 +152,7 @@ export const DataTable = Util.forwardRefEx(<T,>(props: DataTableProps<T>, ref: R
 
               {headerGroup.headers.filter(h => !(h.column.columnDef as ColumnDefEx<T>).hidden).map(header => (
                 <th key={header.id}
+                  colSpan={header.colSpan}
                   className="relative overflow-hidden px-1 py-0 text-start bg-color-3"
                   style={{ width: getColWidth(header), ...getThStickeyStyle(header) }}>
                   {!header.isPlaceholder && RT.flexRender(

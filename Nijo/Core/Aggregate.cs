@@ -160,7 +160,7 @@ namespace Nijo.Core {
                 .Select(edge => edge.As<Aggregate>());
         }
         /// <summary>
-        /// この集約を参照し、かつそれが参照元集約の唯一のキーであるものを列挙する
+        /// この集約を参照し、かつそれが参照元集約の唯一のキーであるものを列挙する。
         /// </summary>
         internal static IEnumerable<GraphEdge<Aggregate>> GetReferedEdgesAsSingleKey(this GraphNode<Aggregate> target) {
             var refered = target.GetReferedEdges();
@@ -171,12 +171,36 @@ namespace Nijo.Core {
                     .Where(key => key.DeclaringAggregate == source)
                     .ToArray();
 
-                if (keys.Length == 1
+                if (source.Item.Options.Handler == NijoCodeGenerator.Models.WriteModel.Key
+                    && keys.Length == 1
                     && keys[0] is AggregateMember.Ref rm
                     && rm.MemberAggregate == target) {
                     yield return edge;
                 }
             }
+        }
+        /// <summary>
+        /// この集約を参照し、かつそれが参照元集約の唯一のキーであるものを列挙する。
+        /// 参照が2連鎖以上続く場合のために再帰処理。
+        /// </summary>
+        internal static IEnumerable<GraphEdge<Aggregate>> GetReferedEdgesAsSingleKeyRecursively(this GraphNode<Aggregate> target) {
+            foreach (var ref1 in target.GetReferedEdgesAsSingleKey()) {
+                yield return ref1;
+
+                foreach (var ref2 in ref1.Initial.GetReferedEdgesAsSingleKeyRecursively()) {
+                    yield return ref2;
+                }
+            }
+        }
+
+        /// <summary>
+        /// この集約のすべてのメンバーが2次元の表で表現できるかどうかを返します。
+        /// </summary>
+        internal static bool CanDisplayAllMembersAs2DGrid(this GraphNode<Aggregate> aggregate) {
+            return aggregate
+                .EnumerateDescendants()
+                .All(agg => !agg.IsChildrenMember()
+                         && !agg.IsVariationMember());
         }
     }
 }

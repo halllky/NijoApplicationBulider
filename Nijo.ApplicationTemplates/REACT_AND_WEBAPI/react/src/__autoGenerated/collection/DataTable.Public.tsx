@@ -14,6 +14,7 @@ export type DataTableProps<T> = {
 }
 export type ColumnDefEx<TRow, TValue = any> = RT.ColumnDef<TRow> & {
   hidden?: boolean
+  headerGroupName?: string
 } & ({
   cellEditor?: never
   setValue?: never

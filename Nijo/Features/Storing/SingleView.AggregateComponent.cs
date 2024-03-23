@@ -108,9 +108,7 @@ namespace Nijo.Features.Storing {
                     }
                     """;
 
-            } else if (_aggregate.GetMembers().Any(m => m is AggregateMember.Child
-                                                     || m is AggregateMember.Children
-                                                     || m is AggregateMember.VariationItem)) {
+            } else if (!_aggregate.CanDisplayAllMembersAs2DGrid()) {
                 // Childrenのレンダリング（子集約をもつ場合）
                 var loopVar = $"index_{Arguments.Count}";
                 var createNewChildrenItem = new TSInitializerFunction(_aggregate).FunctionName;
@@ -183,12 +181,23 @@ namespace Nijo.Features.Storing {
                 var loopVar = $"index_{Arguments.Count}";
                 var createNewChildrenItem = new TSInitializerFunction(_aggregate).FunctionName;
                 var editable = _mode == SingleView.E_Type.View ? "false" : "true";
-                var colDefs = Members.Select((member, ix) => DataTableColumn.FromMember(
-                    member,
-                    "item",
-                    _aggregate,
-                    $"col{ix}",
-                    _mode == SingleView.E_Type.View));
+
+                var colMembers = new List<AggregateMember.AggregateMemberBase>();
+                colMembers.AddRange(Members);
+                colMembers.AddRange(_aggregate
+                    .GetReferedEdgesAsSingleKeyRecursively()
+                    .SelectMany(edge => new AggregateDetail(edge.Initial).GetOwnMembers())
+                    .Where(member => member is not AggregateMember.Ref rm
+                                  || !rm.Relation.IsPrimary()));
+                var colDefs = colMembers
+                    .Where(member => member is AggregateMember.ValueMember
+                                  || member is AggregateMember.Ref)
+                    .Select((member, ix) => DataTableColumn.FromMember(
+                        member,
+                        "item",
+                        _aggregate,
+                        $"col{ix}",
+                        _mode == SingleView.E_Type.View));
 
                 return $$"""
                     const {{ComponentName}} = ({ {{Arguments.Join(", ")}} }: {
