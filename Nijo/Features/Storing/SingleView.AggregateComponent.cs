@@ -52,9 +52,11 @@ namespace Nijo.Features.Storing {
             var relevantAggregatesCalling = relevantAggregates
                 .SelectTextTemplate(edge =>  $$"""
                     <VForm.Spacer />
-                    <VForm.Section label="{{edge.Initial.Item.DisplayName}}" table>
-                      {{WithIndent(new AggregateComponent(edge.Initial, _mode).RenderCaller(), "  ")}}
-                    </VForm.Section>
+                    <VForm.Root>
+                      <VForm.Section label="{{edge.Initial.Item.DisplayName}}" table>
+                        {{WithIndent(new AggregateComponent(edge.Initial, _mode).RenderCaller(), "    ")}}
+                      </VForm.Section>
+                    </VForm.Root>
                     """);
 
             if (_relationToParent == null) {
