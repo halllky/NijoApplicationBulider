@@ -46,10 +46,9 @@ namespace Nijo.Features.Storing {
             var useFormType = $"AggregateType.{_aggregate.GetEntry().As<Aggregate>().Item.TypeScriptTypeName}";
             var registerName = GetRegisterName();
 
-            // この集約を参照する隣接集約
-            var relevantAggregates = _aggregate
-                .GetReferedEdgesAsSingleKey();
-            var relevantAggregatesCalling = relevantAggregates
+            // この集約を参照する隣接集約 ※DataTableの列定義は当該箇所で定義している
+            var relevantAggregatesCalling = _aggregate
+                .GetReferedEdgesAsSingleKey()
                 .SelectTextTemplate(edge =>  $$"""
                     <VForm.Spacer />
                     <VForm.Root>
@@ -191,11 +190,7 @@ namespace Nijo.Features.Storing {
                                     </VForm.Row>
                     """)}}
                                   </VForm.Section>
-                    {{relevantAggregates.SelectTextTemplate(edge => $$"""
-                                  <VForm.Section label="{{edge.RelationName}}" table>
-                                    {{WithIndent(new AggregateComponent(edge.Initial, _mode).RenderCaller(), "  ")}}
-                                  </VForm.Section>
-                    """)}}
+                                  {{WithIndent(relevantAggregatesCalling, "              ")}}
                                 </VForm.Root>
                               )}
                             </Layout.TabGroup>
@@ -213,7 +208,8 @@ namespace Nijo.Features.Storing {
 
                 var colMembers = new List<AggregateMember.AggregateMemberBase>();
                 colMembers.AddRange(GetMembers());
-                colMembers.AddRange(relevantAggregates
+                colMembers.AddRange(_aggregate
+                    .GetReferedEdgesAsSingleKeyRecursively()
                     .SelectMany(edge => new AggregateDetail(edge.Initial).GetOwnMembers())
                     .Where(member => member is not AggregateMember.Ref rm
                                   || !rm.Relation.IsPrimary()));
