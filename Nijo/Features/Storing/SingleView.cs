@@ -118,6 +118,7 @@ namespace Nijo.Features.Storing {
                     .DefaultIfEmpty()
                     .Max();
 
+                // -----------------------------------------
                 // 左列の横幅の計算
                 const decimal INDENT_WIDTH = 1.5m;
                 var headersWidthRem = _aggregate
@@ -151,6 +152,21 @@ namespace Nijo.Features.Storing {
                 // - ヘッダ列の横幅にちょっと余裕をもたせるために+1
                 var indentWidth = maxIndent * INDENT_WIDTH;
                 var headerWidth = Math.Max(indentWidth, longestHeaderWidthRem - indentWidth) + 1m;
+
+                // -----------------------------------------
+                // 集約コンポーネントの宣言
+                var aggregateComponents = new List<AggregateComponent>{
+                    new AggregateComponent(_aggregate, _type),
+                };
+                aggregateComponents.AddRange(_aggregate
+                    .EnumerateThisAndDescendants()
+                    .SelectMany(desc => desc.GetMembers())
+                    .OfType<AggregateMember.RelationMember>()
+                    // RefやParentを除外する
+                    .Where(member => member is AggregateMember.Child
+                                  || member is AggregateMember.Children
+                                  || member is AggregateMember.VariationItem)
+                    .Select(member => new AggregateComponent(member, _type)));
 
                 return $$"""
                     import React, { useState, useEffect, useCallback, useMemo, useReducer, useRef, useId } from 'react';
@@ -375,14 +391,7 @@ namespace Nijo.Features.Storing {
                       )
                     }
 
-                    {{new AggregateComponent(_aggregate, _type).Render()}}
-                    {{_aggregate
-                            .EnumerateThisAndDescendants()
-                            .SelectMany(desc => desc.GetMembers())
-                            .OfType<AggregateMember.RelationMember>()
-                            .Where(member => member is not AggregateMember.Ref
-                                          && member is not AggregateMember.Parent)
-                            .SelectTextTemplate(member => new AggregateComponent(member, _type).Render())}}
+                    {{aggregateComponents.SelectTextTemplate(component => component.RenderDeclaration())}}
                     """;
             },
         };

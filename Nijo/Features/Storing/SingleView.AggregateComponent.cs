@@ -7,7 +7,6 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 using Nijo.Util.CodeGenerating;
-using System.ComponentModel;
 using Nijo.Parts.WebClient;
 
 namespace Nijo.Features.Storing {
@@ -30,43 +29,52 @@ namespace Nijo.Features.Storing {
         private readonly AggregateMember.RelationMember? _relationToParent;
         private readonly SingleView.E_Type _mode;
 
-        private string ComponentName => $"{_aggregate.Item.TypeScriptTypeName}View";
-
-        private IReadOnlyList<string>? _arguments;
-        private IReadOnlyList<string> Arguments {
-            get {
-                // 祖先コンポーネントの中に含まれるChildrenの数だけ、
-                // このコンポーネントのその配列中でのインデックスが特定されている必要があるので、引数で渡す
-                return _arguments ??= _aggregate
-                    .PathFromEntry()
-                    .Where(edge => edge.Terminal != _aggregate
-                                && edge.Terminal.As<Aggregate>().IsChildrenMember())
-                    .Select((_, i) => $"index_{i}")
-                    .ToArray();
-            }
-        }
-
-        private IEnumerable<AggregateMember.AggregateMemberBase>? _members;
-        private IEnumerable<AggregateMember.AggregateMemberBase> Members => _members ??= new AggregateDetail(_aggregate).GetOwnMembers();
-
         internal string RenderCaller() {
-            var args = Arguments
+            var componentName = GetComponentName();
+            var args = GetArguments()
                 .Select(arg => $" {arg}={{{arg}}}")
                 .Join(string.Empty);
-            return $"<{ComponentName}{args} />";
+
+            return $"<{componentName}{args} />";
         }
 
-        internal string Render() {
-            if (_relationToParent == null || _relationToParent is AggregateMember.Child) {
-                // ルート集約またはChildのレンダリング
+        internal string RenderDeclaration() {
+            var componentName = GetComponentName();
+            var args = GetArguments().ToArray();
+
+            // useFormの型。Refの参照元のコンポーネントのレンダリングの可能性があるためGetRootではなくGetEntry
+            var useFormType = $"AggregateType.{_aggregate.GetEntry().As<Aggregate>().Item.TypeScriptTypeName}";
+            var registerName = GetRegisterName();
+
+            if (_relationToParent == null) {
+                // ルート集約のレンダリング
                 return $$"""
-                    const {{ComponentName}} = ({ {{Arguments.Join(", ")}} }: {
-                    {{Arguments.SelectTextTemplate(arg => $$"""
+                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
                     }) => {
-                      const { register, registerEx, watch, getValues } = Util.useFormContextEx<AggregateType.{{_aggregate.GetRoot().Item.TypeScriptTypeName}}>()
-                      const item = getValues({{GetRegisterName()}})
+                      const { register, registerEx, watch, getValues } = Util.useFormContextEx<{{useFormType}}>()
+                      const item = getValues({{registerName}})
+
+                      return (
+                        <>
+                          {{WithIndent(RenderMembers(), "      ")}}
+                        </>
+                      )
+                    }
+                    """;
+
+            } else if (_relationToParent is AggregateMember.Child) {
+                // Childのレンダリング
+                return $$"""
+                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    {{args.SelectTextTemplate(arg => $$"""
+                      {{arg}}: number
+                    """)}}
+                    }) => {
+                      const { register, registerEx, watch, getValues } = Util.useFormContextEx<{{useFormType}}>()
+                      const item = getValues({{registerName}})
 
                       return (
                         <>
@@ -81,13 +89,13 @@ namespace Nijo.Features.Storing {
                 var switchProp = GetRegisterName(_aggregate.GetParent()!.Initial, variation.Group);
 
                 return $$"""
-                    const {{ComponentName}} = ({ {{Arguments.Join(", ")}} }: {
-                    {{Arguments.SelectTextTemplate(arg => $$"""
+                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
                     }) => {
-                      const { registerEx, watch, getValues } = Util.useFormContextEx<AggregateType.{{_aggregate.GetRoot().Item.TypeScriptTypeName}}>()
-                      const item = getValues({{GetRegisterName()}})
+                      const { registerEx, watch, getValues } = Util.useFormContextEx<{{useFormType}}>()
+                      const item = getValues({{registerName}})
 
                       const body = (
                         <>
@@ -110,19 +118,19 @@ namespace Nijo.Features.Storing {
 
             } else if (!_aggregate.CanDisplayAllMembersAs2DGrid()) {
                 // Childrenのレンダリング（子集約をもつ場合）
-                var loopVar = $"index_{Arguments.Count}";
+                var loopVar = $"index_{args.Length}";
                 var createNewChildrenItem = new TSInitializerFunction(_aggregate).FunctionName;
 
                 return $$"""
-                    const {{ComponentName}} = ({ {{Arguments.Join(", ")}} }: {
-                    {{Arguments.SelectTextTemplate(arg => $$"""
+                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
                     }) => {
-                      const { registerEx, watch, control } = Util.useFormContextEx<AggregateType.{{_aggregate.GetRoot().Item.TypeScriptTypeName}}>()
+                      const { registerEx, watch, control } = Util.useFormContextEx<{{useFormType}}>()
                       const { fields, append, remove } = useFieldArray({
                         control,
-                        name: {{GetRegisterName()}},
+                        name: {{registerName}},
                       })
                     {{If(_mode != SingleView.E_Type.View, () => $$"""
                       const onAdd = useCallback((e: React.MouseEvent) => {
@@ -178,12 +186,12 @@ namespace Nijo.Features.Storing {
 
             } else {
                 // Childrenのレンダリング（子集約をもたない場合）
-                var loopVar = $"index_{Arguments.Count}";
+                var loopVar = $"index_{args.Length}";
                 var createNewChildrenItem = new TSInitializerFunction(_aggregate).FunctionName;
                 var editable = _mode == SingleView.E_Type.View ? "false" : "true";
 
                 var colMembers = new List<AggregateMember.AggregateMemberBase>();
-                colMembers.AddRange(Members);
+                colMembers.AddRange(GetMembers());
                 colMembers.AddRange(_aggregate
                     .GetReferedEdgesAsSingleKeyRecursively()
                     .SelectMany(edge => new AggregateDetail(edge.Initial).GetOwnMembers())
@@ -200,15 +208,15 @@ namespace Nijo.Features.Storing {
                         _mode == SingleView.E_Type.View));
 
                 return $$"""
-                    const {{ComponentName}} = ({ {{Arguments.Join(", ")}} }: {
-                    {{Arguments.SelectTextTemplate(arg => $$"""
+                    const {{componentName}} = ({ {{args.Join(", ")}} }: {
+                    {{args.SelectTextTemplate(arg => $$"""
                       {{arg}}: number
                     """)}}
                     }) => {
-                      const { registerEx, watch, control } = Util.useFormContextEx<AggregateType.{{_aggregate.GetRoot().Item.TypeScriptTypeName}}>()
+                      const { registerEx, watch, control } = Util.useFormContextEx<{{useFormType}}>()
                       const { fields, append, remove, update } = useFieldArray({
                         control,
-                        name: {{GetRegisterName()}},
+                        name: {{registerName}},
                       })
                       const dtRef = useRef<Layout.DataTableRef<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}>>(null)
 
@@ -266,7 +274,7 @@ namespace Nijo.Features.Storing {
         }
 
         private string RenderMembers() {
-            return Members.SelectTextTemplate(prop => prop switch {
+            return GetMembers().SelectTextTemplate(prop => prop switch {
                 AggregateMember.Schalar x => RenderProperty(x),
                 AggregateMember.Ref x => RenderProperty(x),
                 AggregateMember.Child x => RenderProperty(x),
@@ -411,6 +419,26 @@ namespace Nijo.Features.Storing {
             }
         }
 
+        #region 部品
+        private string GetComponentName() {
+            return $"{_aggregate.Item.TypeScriptTypeName}View";
+        }
+
+        private IReadOnlyList<string> GetArguments() {
+            // 祖先コンポーネントの中に含まれるChildrenの数だけ、
+            // このコンポーネントのその配列中でのインデックスが特定されている必要があるので、引数で渡す
+            return _aggregate
+                .PathFromEntry()
+                .Where(edge => edge.Terminal != _aggregate
+                            && edge.Terminal.As<Aggregate>().IsChildrenMember())
+                .Select((_, i) => $"index_{i}")
+                .ToArray();
+        }
+
+        private IEnumerable<AggregateMember.AggregateMemberBase> GetMembers() {
+            return new AggregateDetail(_aggregate).GetOwnMembers();
+        }
+
         private string GetRegisterName(AggregateMember.AggregateMemberBase? prop = null) {
             return GetRegisterName(_aggregate, prop);
         }
@@ -453,5 +481,6 @@ namespace Nijo.Features.Storing {
                 _ => throw new NotImplementedException(),
             };
         }
+        #endregion 部品
     }
 }
