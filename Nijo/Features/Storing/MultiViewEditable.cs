@@ -47,7 +47,8 @@ namespace Nijo.Features.Storing {
 
             var groupedSearchConditions = findMany
                 .EnumerateSearchConditionMembers()
-                .GroupBy(member => member.DeclaringAggregate)
+                .Where(vm => !vm.Options.InvisibleInGui)
+                .GroupBy(vm => vm.DeclaringAggregate)
                 // 自身のメンバーを検索条件の先頭に表示する
                 .OrderBy(group => group.Key == _aggregate ? 1 : 2);
 

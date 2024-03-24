@@ -170,20 +170,31 @@ namespace Nijo.Features.Storing {
         /// 検索条件のメンバーを列挙
         /// </summary>
         internal IEnumerable<AggregateMember.ValueMember> EnumerateSearchConditionMembers() {
-            static IEnumerable<AggregateMember.ValueMember> EnumerateRecursively(GraphNode<Aggregate> agg) {
+            IEnumerable<AggregateMember.ValueMember> EnumerateRecursively(GraphNode<Aggregate> agg) {
                 var thisAndChild = agg
                     .EnumerateThisAndDescendants()
-                    .Where(agg => agg.EnumerateAncestors().All(anc => anc.Initial.IsChildMember()));
+                    // ChildrenやVariationの項目を検索条件にするとSQLを組み立てるのが大変なので除外
+                    .Where(a => a.EnumerateAncestors().All(anc => anc.Initial.IsChildMember())
+                             || a == agg); // ChildrenであってもRefされた参照先の場合は除外しない
 
                 foreach (var member in thisAndChild.SelectMany(agg => agg.GetMembers())) {
                     if (member is AggregateMember.ValueMember vm) {
+                        // 後述の else if で列挙されるメンバーと重複してしまうので除外する
                         if (vm.DeclaringAggregate != vm.Owner) continue;
-                        if (vm.Options.InvisibleInGui) continue;
+
                         yield return vm;
 
                     } else if (member is AggregateMember.Ref @ref) {
-                        foreach (var refMember in EnumerateRecursively(@ref.MemberAggregate)) {
-                            yield return refMember;
+                        // 1:1で紐づく参照先の項目でも検索できるようにしたい
+                        foreach (var refVm in EnumerateRecursively(@ref.MemberAggregate)) {
+                            yield return refVm;
+                        }
+
+                    } else if (member is AggregateMember.Parent parent
+                             && !member.Owner.IsInTreeOf(_aggregate)) {
+                        // 参照先が子孫集約の場合、親の属性でも検索できるようにしたい
+                        foreach (var parentVm in EnumerateRecursively(parent.MemberAggregate)) {
+                            yield return parentVm;
                         }
                     }
                 }
@@ -259,26 +270,15 @@ namespace Nijo.Features.Storing {
                     """;
         }
 
-        private static bool SearchConditionClassShouldRendered(GraphNode<Aggregate> agg) {
-
-            var ancestors = agg.EnumerateAncestorsAndThis();
-            if (ancestors.All(anc => anc.IsRoot() || anc.IsChildMember())) return true;
-
-            // ChildrenやVariationであっても他の集約から参照されている場合は検索条件クラスを用意する必要がある
-            if (agg.GetReferedEdges().Any()) return true;
-
-            return false;
-        }
-
         internal string RenderSearchConditionCSharpDeclaring() {
             var aggregates = _aggregate
-                .EnumerateThisAndDescendants()
-                .Where(SearchConditionClassShouldRendered);
+                .EnumerateThisAndDescendants();
 
             return aggregates.SelectTextTemplate(agg => {
                 var members = agg
                     .GetMembers()
-                    .Where(m => m.DeclaringAggregate == agg
+                    .Where(m => m is AggregateMember.Parent
+                             || m.DeclaringAggregate == agg
                              && m is not AggregateMember.Children
                              && m is not AggregateMember.VariationItem);
                 return $$"""
@@ -301,13 +301,13 @@ namespace Nijo.Features.Storing {
 
         internal string RenderSearchConditionTypeScriptDeclaring() {
             var aggregates = _aggregate
-                .EnumerateThisAndDescendants()
-                .Where(SearchConditionClassShouldRendered);
+                .EnumerateThisAndDescendants();
 
             return aggregates.SelectTextTemplate(agg => {
                 var members = agg
                     .GetMembers()
-                    .Where(m => m.DeclaringAggregate == agg
+                    .Where(m => m is AggregateMember.Parent
+                             || m.DeclaringAggregate == agg
                              && m is not AggregateMember.Children
                              && m is not AggregateMember.VariationItem);
                 return $$"""
