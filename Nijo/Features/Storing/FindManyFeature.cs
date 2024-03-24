@@ -38,12 +38,6 @@ namespace Nijo.Features.Storing {
         }
 
         internal string RenderController() {
-            var keys = _aggregate
-                .GetKeys()
-                .Where(m => m is AggregateMember.ValueMember)
-                .ToArray();
-            var controller = new Parts.WebClient.Controller(_aggregate.Item);
-
             return $$"""
                 [HttpPost("{{ACTION_NAME}}")]
                 public virtual IActionResult Load([FromBody]{{GetConditionClassName(_aggregate)}}? {{PARAM_FILTER}}, [FromQuery] int? {{PARAM_SKIP}}, [FromQuery] int? {{PARAM_TAKE}}) {
