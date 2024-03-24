@@ -35,9 +35,13 @@ namespace Nijo.Parts.WebClient {
                 }
             } else if (refMember != null) {
                 var names = refMember.MemberAggregate
+                    .AsEntry() // 以下のような場合にエラーになるのでエントリー化する:
+                               // 参照先集約のSingleViewのChildrenのDataTableで、参照元を一緒に表示、
+                               // かつ参照元の表示名称に参照先がふくまれている場合
+                               // （有向グラフの経路で言うと参照先→参照元→参照先のようにぐるっと回って戻ってくるパターン）
                     .GetNames()
                     .OfType<AggregateMember.ValueMember>()
-                    .Select(name => name.Declared.GetFullPath(since: refMember.MemberAggregate));
+                    .Select(name => name.Declared.GetFullPath());
                 formatted = $$"""
                     let formatted = ''
                     {{names.SelectTextTemplate(name => $$"""
