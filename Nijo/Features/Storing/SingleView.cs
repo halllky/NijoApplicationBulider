@@ -1,4 +1,7 @@
 using Nijo.Core;
+using Nijo.Features.BatchUpdate;
+using Nijo.Parts.WebClient;
+using Nijo.Util.CodeGenerating;
 using Nijo.Util.DotnetEx;
 using System;
 using System.Collections.Generic;
@@ -6,11 +9,6 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Nijo.Util.CodeGenerating;
-using Nijo.Features;
-using Nijo.Parts.WebServer;
-using Nijo.Features.BatchUpdate;
-using Nijo.Parts.WebClient;
 
 namespace Nijo.Features.Storing {
     public class SingleView : IReactPage {
@@ -94,8 +92,9 @@ namespace Nijo.Features.Storing {
                 var controller = new Controller(_aggregate.Item);
                 var multiViewUrl = new MultiViewEditable(_aggregate).Url;
                 var createEmptyObject = new TSInitializerFunction(_aggregate).FunctionName;
+                var dataClass = new SingleViewDataClass(_aggregate).Name;
 
-                var find = new FindFeature(_aggregate);
+                var findOne = new FindOneFeature(_aggregate);
 
                 var keyName = new RefTargetKeyName(_aggregate);
                 var keys = _aggregate
@@ -189,9 +188,9 @@ namespace Nijo.Features.Storing {
 
                     export default function () {
                       const [, dispatchMsg] = Util.useMsgContext()
-                      const { get } = Util.useHttpRequest()
+                      const { get, post } = Util.useHttpRequest()
                       const { {{urlKeys.Select((urlkey, i) => $"key{i}: {urlkey}").Join(", ")}} } = useParams()
-                      const [fetched, setFetched] = useState<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}>()
+                      const [fetched, setFetched] = useState<AggregateType.{{dataClass}}>()
                       const [localReposItemKey, setLocalReposItemKey] = useState<Util.ItemKey>()
                     {{If(_aggregate.Item.Options.DisableLocalRepository != true, () => $$"""
                       const localReposSettings: Util.LocalRepositoryArgs<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}> = useMemo(() => ({
@@ -216,9 +215,9 @@ namespace Nijo.Features.Storing {
 
                             Util.visitObject(item, obj => {
                               // 新規データのみ主キーを編集可能にするため、読込データと新規データを区別するためのフラグをつける
-                              (obj as { {{AggregateDetail.IS_LOADED}}?: boolean }).{{AggregateDetail.IS_LOADED}} = true;
+                              (obj as { {{SingleViewDataClass.IS_LOADED}}?: boolean }).{{SingleViewDataClass.IS_LOADED}} = true;
                               // 配列中のオブジェクト識別用
-                              (obj as { {{AggregateDetail.OBJECT_ID}}: string }).{{AggregateDetail.OBJECT_ID}} = UUID.generate()
+                              (obj as { {{SingleViewDataClass.OBJECT_ID}}: string }).{{SingleViewDataClass.OBJECT_ID}} = UUID.generate()
                             })
 
                             setFetched({ ...item })
@@ -234,12 +233,12 @@ namespace Nijo.Features.Storing {
                         if ({{urlkey}} == null) return;
                     """)}}
                         (async () => {
-                          const response = await get({{find.GetUrlStringForReact(urlKeys)}})
+                          const response = await get({{findOne.GetUrlStringForReact(urlKeys)}})
                           if (!response.ok) {
                             dispatchMsg(msg => msg.warn('データの読み込みに失敗しました。'))
                             return
                           }
-                          const remoteReposItem = response.data as AggregateType.{{_aggregate.Item.TypeScriptTypeName}}
+                          const remoteReposItem = response.data as AggregateType.{{dataClass}}
 
                           // 編集中のデータがある場合はそちらを表示
                           const itemKey = JSON.stringify([{{keys.Select(k => $"remoteReposItem.{k.Declared.GetFullPath().Join("?.")}").Join(", ")}}]) as Util.ItemKey
@@ -248,15 +247,15 @@ namespace Nijo.Features.Storing {
 
                           Util.visitObject(item, obj => {
                             // 新規データのみ主キーを編集可能にするため、読込データと新規データを区別するためのフラグをつける
-                            (obj as { {{AggregateDetail.IS_LOADED}}?: boolean }).{{AggregateDetail.IS_LOADED}} = true;
+                            (obj as { {{SingleViewDataClass.IS_LOADED}}?: boolean }).{{SingleViewDataClass.IS_LOADED}} = true;
                             // 配列中のオブジェクト識別用
-                            (obj as { {{AggregateDetail.OBJECT_ID}}: string }).{{AggregateDetail.OBJECT_ID}} = UUID.generate()
+                            (obj as { {{SingleViewDataClass.OBJECT_ID}}: string }).{{SingleViewDataClass.OBJECT_ID}} = UUID.generate()
                           })
 
                           setFetched({ ...item })
                           setLocalReposItemKey(itemKey)
                         })()
-                      }, [localReposIsReady, findLocalItem, {{urlKeys.Join(", ")}}, get, setFetched, setLocalReposItemKey, dispatchMsg])
+                      }, [localReposIsReady, findLocalItem, {{urlKeys.Join(", ")}}, get, post, setFetched, setLocalReposItemKey, dispatchMsg])
 
                     """)}}
 
@@ -275,7 +274,7 @@ namespace Nijo.Features.Storing {
 
                     const AfterLoaded = ({ localReposItemKey, defaultValues{{string.Concat(urlKeys.Select(urlkey => $", {urlkey}"))}} }: {
                       localReposItemKey?: Util.ItemKey
-                      defaultValues: AggregateType.{{_aggregate.Item.TypeScriptTypeName}}
+                      defaultValues: AggregateType.{{dataClass}}
                     {{urlKeys.SelectTextTemplate((urlkey, i) => $$"""
                       {{urlkey}}?: string
                     """)}}
@@ -290,7 +289,7 @@ namespace Nijo.Features.Storing {
                         return `{{names.Select(n => $"${{defaultValues.{n}}}").Join(string.Empty)}}`
                       }, [defaultValues])
                     {{If(_aggregate.Item.Options.DisableLocalRepository != true, () => $$"""
-                      const localReposSettings: Util.LocalRepositoryArgs<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}> = useMemo(() => ({
+                      const localReposSettings: Util.LocalRepositoryArgs<AggregateType.{{dataClass}}> = useMemo(() => ({
                         dataTypeKey: '{{_aggregate.Item.ClassName}}',
                         getItemKey: x => JSON.stringify([{{keys.Select(k => $"x.{k.Declared.GetFullPath().Join("?.")}").Join(", ")}}]),
                         getItemName: x => `{{names.Select(n => $"${{x.{n}}}").Join(string.Empty)}}`,
@@ -322,8 +321,8 @@ namespace Nijo.Features.Storing {
                       }, [navigate, {{urlKeys.Join(", ")}}])
 
                     """).ElseIf(_type == E_Type.Create && _aggregate.Item.Options.DisableLocalRepository == true, () => $$"""
-                      const onSave: SubmitHandler<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}> = useCallback(async data => {
-                        const response = await post<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}>(`{{controller.CreateCommandApi}}`, data)
+                      const onSave: SubmitHandler<AggregateType.{{dataClass}}> = useCallback(async data => {
+                        const response = await post<AggregateType.{{dataClass}}>(`{{controller.CreateCommandApi}}`, data)
                         if (response.ok) {
                           dispatchMsg(msg => msg.info(`${({{names.Select(path => $"String(response.data.{path})").Join(" + ")}})}を作成しました。`))
                           navigate(`{{GetUrlStringForReact(E_Type.View, keys.Select(m => AggregateDetail.GetPathOf("response.data", _aggregate, m).Join("?.")))}}`)
@@ -331,8 +330,8 @@ namespace Nijo.Features.Storing {
                       }, [post, navigate])
 
                     """).ElseIf(_type == E_Type.Edit && _aggregate.Item.Options.DisableLocalRepository == true, () => $$"""
-                      const onSave: SubmitHandler<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}> = useCallback(async data => {
-                        const response = await post<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}>(`{{controller.UpdateCommandApi}}`, data)
+                      const onSave: SubmitHandler<AggregateType.{{dataClass}}> = useCallback(async data => {
+                        const response = await post<AggregateType.{{dataClass}}>(`{{controller.UpdateCommandApi}}`, data)
                         if (response.ok) {
                           dispatchMsg(msg => msg.info(`${({{names.Select(path => $"String(response.data.{path})").Join(" + ")}})}を更新しました。`))
                           navigate(`{{GetUrlStringForReact(E_Type.View, urlKeys)}}`)
@@ -340,7 +339,7 @@ namespace Nijo.Features.Storing {
                       }, [post, navigate, {{urlKeys.Join(", ")}}])
 
                     """).ElseIf(_type == E_Type.Create, () => $$"""
-                      const onSave: SubmitHandler<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}> = useCallback(async data => {
+                      const onSave: SubmitHandler<AggregateType.{{dataClass}}> = useCallback(async data => {
                         if (localReposItemKey === undefined) {
                           const { itemKey } = await addToLocalRepository(data)
                           navigate(`{{GetUrlStringForReact(E_Type.Create, new[] { "itemKey" })}}`)
@@ -350,7 +349,7 @@ namespace Nijo.Features.Storing {
                       }, [localReposItemKey, addToLocalRepository, updateLocalRepositoryItem, navigate])
 
                     """).ElseIf(_type == E_Type.Edit, () => $$"""
-                      const onSave: SubmitHandler<AggregateType.{{_aggregate.Item.TypeScriptTypeName}}> = useCallback(async data => {
+                      const onSave: SubmitHandler<AggregateType.{{dataClass}}> = useCallback(async data => {
                         if (localReposItemKey === undefined) return
                     {{urlKeys.SelectTextTemplate(urlkey => $$"""
                         if ({{urlkey}} == null) return

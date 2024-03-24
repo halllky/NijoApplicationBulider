@@ -168,7 +168,7 @@ namespace Nijo.Features.Storing {
                           <VForm.Row fullWidth>
                             <Layout.TabGroup
                               items={fields}
-                              keySelector={item => item.{{AggregateDetail.OBJECT_ID}} ?? ''}
+                              keySelector={item => item.{{SingleViewDataClass.OBJECT_ID}} ?? ''}
                     {{If(_mode != SingleView.E_Type.View, () => $$"""
                               onCreate={onCreate}
                     """)}}
@@ -433,7 +433,7 @@ namespace Nijo.Features.Storing {
 
                 } else if (_mode == SingleView.E_Type.Edit
                            && schalar is AggregateMember.ValueMember vm && vm.IsKey) {
-                    reactComponent.Props.Add("readOnly", $"item?.{AggregateDetail.IS_LOADED}");
+                    reactComponent.Props.Add("readOnly", $"item?.{SingleViewDataClass.IS_LOADED}");
                 }
 
                 return $$"""
@@ -511,7 +511,7 @@ namespace Nijo.Features.Storing {
                 SingleView.E_Type.Edit
                     => prop is AggregateMember.ValueMember vm && vm.IsKey
                     || prop is AggregateMember.Ref @ref && @ref.Relation.IsPrimary()
-                        ? $"{readOnly}={{item?.{AggregateDetail.IS_LOADED}}}"
+                        ? $"{readOnly}={{item?.{SingleViewDataClass.IS_LOADED}}}"
                         : $"",
                 _ => throw new NotImplementedException(),
             };

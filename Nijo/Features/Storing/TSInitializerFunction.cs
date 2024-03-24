@@ -66,7 +66,7 @@ namespace Nijo.Features.Storing {
                     {{initializers.SelectTextTemplate(item => $$"""
                       {{item.Key}}: {{item.Value}},
                     """)}}
-                      {{AggregateDetail.OBJECT_ID}}: UUID.generate(),
+                      {{SingleViewDataClass.OBJECT_ID}}: UUID.generate(),
                     })
                     """;
         }

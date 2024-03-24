@@ -1,16 +1,17 @@
-using Nijo.Parts.Utility;
 using Nijo.Core;
+using Nijo.Parts.WebServer;
+using Nijo.Util.CodeGenerating;
 using Nijo.Util.DotnetEx;
 using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
-using Nijo.Util.CodeGenerating;
-using Nijo.Parts;
-using Nijo.Parts.WebServer;
 
 namespace Nijo.Features.Storing {
+    /// <summary>
+    /// 登録更新の最初で対象の集約をDBからロードする処理
+    /// </summary>
     internal class FindFeature {
         internal FindFeature(GraphNode<Aggregate> aggregate) {
             _aggregate = aggregate;
@@ -20,36 +21,6 @@ namespace Nijo.Features.Storing {
 
         internal string FindMethodReturnType => _aggregate.Item.ClassName;
         internal string FindMethodName => $"Find{_aggregate.Item.DisplayName.ToCSharpSafe()}";
-        private const string ACTION_NAME = "detail";
-
-        internal string GetUrlStringForReact(IEnumerable<string> keyVariables) {
-            var controller = new Parts.WebClient.Controller(_aggregate.Item);
-            var encoded = keyVariables.Select(key => $"${{window.encodeURI({key})}}");
-            return $"`/{controller.SubDomain}/{ACTION_NAME}/{encoded.Join("/")}`";
-        }
-
-        internal string RenderController() {
-            var keys = _aggregate
-                .GetKeys()
-                .Where(m => m is AggregateMember.ValueMember)
-                .ToArray();
-            var controller = new Parts.WebClient.Controller(_aggregate.Item);
-
-            return $$"""
-                [HttpGet("{{ACTION_NAME}}/{{keys.Select(m => "{" + m.MemberName + "}").Join("/")}}")]
-                public virtual IActionResult Find({{keys.Select(m => $"{m.CSharpTypeName}? {m.MemberName}").Join(", ")}}) {
-                {{keys.SelectTextTemplate(m => $$"""
-                    if ({{m.MemberName}} == null) return BadRequest();
-                """)}}
-                    var instance = _applicationService.{{FindMethodName}}({{keys.Select(m => m.MemberName).Join(", ")}});
-                    if (instance == null) {
-                        return NotFound();
-                    } else {
-                        return this.JsonContent(instance);
-                    }
-                }
-                """;
-        }
 
         internal string RenderAppSrvMethod() {
             var appSrv = new ApplicationService();
@@ -62,6 +33,7 @@ namespace Nijo.Features.Storing {
                 public virtual {{FindMethodReturnType}}? {{FindMethodName}}({{args.Select(m => $"{m.CSharpTypeName}? {m.MemberName}").Join(", ")}}) {
 
                     {{WithIndent(RenderDbEntityLoading(
+                        _aggregate,
                         appSrv.DbContext,
                         "entity",
                         args.Select(a => a.MemberName).ToArray(),
@@ -82,14 +54,23 @@ namespace Nijo.Features.Storing {
                 .Where(m => m is AggregateMember.ValueMember);
         }
 
-        internal string RenderDbEntityLoading(string dbContextVarName, string entityVarName, IList<string> searchKeys, bool tracks, bool includeRefs) {
+        /// <summary>
+        /// TODO: この操作は随所に出てくるので DbManipulation.cs などそれ用のクラスを設けてそちらに移したほうがよいかもしれない
+        /// </summary>
+        internal static string RenderDbEntityLoading(
+            GraphNode<Aggregate> rootAggregate,
+            string dbContextVarName,
+            string entityVarName,
+            IList<string> searchKeys,
+            bool tracks,
+            bool includeRefs) {
 
             // Include
-            var includeEntities = _aggregate
+            var includeEntities = rootAggregate
                 .EnumerateThisAndDescendants()
                 .ToList();
             if (includeRefs) {
-                var refEntities = _aggregate
+                var refEntities = rootAggregate
                     .EnumerateThisAndDescendants()
                     .SelectMany(agg => agg.GetMembers())
                     .Select(m => m.DeclaringAggregate);
@@ -112,17 +93,17 @@ namespace Nijo.Features.Storing {
                 });
 
             // SingleOrDefault
-            var keys = _aggregate
+            var keys = rootAggregate
                 .GetKeys()
                 .Where(m => m is AggregateMember.ValueMember)
                 .SelectTextTemplate((m, i) => $"x.{m.GetFullPath().Join(".")} == {searchKeys.ElementAtOrDefault(i)}");
 
             return $$"""
-                var {{entityVarName}} = {{dbContextVarName}}.{{_aggregate.Item.DbSetName}}
+                var {{entityVarName}} = {{dbContextVarName}}.{{rootAggregate.Item.DbSetName}}
                 {{If(tracks == false, () => $$"""
                     .AsNoTracking()
                 """)}}
-                {{paths.SelectTextTemplate(path => path.source == _aggregate ? $$"""
+                {{paths.SelectTextTemplate(path => path.source == rootAggregate ? $$"""
                     .Include(x => x.{{path.prop}})
                 """ : $$"""
                     .ThenInclude(x => x.{{path.prop}})

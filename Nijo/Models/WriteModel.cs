@@ -31,9 +31,10 @@ namespace Nijo.Models {
 
                 // AggregateDetail (for Find, Update, Delete)
                 var findFeature = new FindFeature(rootAggregate);
+                var findOneFeature = new FindOneFeature(rootAggregate);
                 var updateFeature = new UpdateFeature(rootAggregate);
                 var deleteFeature = new DeleteFeature(rootAggregate);
-                builder.ControllerActions.Add(findFeature.RenderController());
+                builder.ControllerActions.Add(findOneFeature.RenderController());
                 builder.ControllerActions.Add(updateFeature.RenderController());
                 builder.ControllerActions.Add(deleteFeature.RenderController());
                 builder.AppServiceMethods.Add(findFeature.RenderAppSrvMethod());
@@ -103,6 +104,10 @@ namespace Nijo.Models {
                         }
                         """);
                 }
+
+                // SingleView
+                builder.DataClassDeclaring.Add(SingleViewDataClass.RenderCSharpDataClassDeclaration(rootAggregate));
+                builder.TypeScriptDataTypes.Add(SingleViewDataClass.RenderTypeScriptDataClassDeclaration(rootAggregate));
             });
 
             var editableMultiView = new MultiViewEditable(rootAggregate);

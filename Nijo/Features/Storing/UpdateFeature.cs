@@ -52,7 +52,8 @@ namespace Nijo.Features.Storing {
                 public virtual bool {{MethodName}}({{detail.ClassName}} after, out {{detail.ClassName}} updated, out ICollection<string> errors) {
                     errors = new List<string>();
 
-                    {{WithIndent(find.RenderDbEntityLoading(
+                    {{WithIndent(FindFeature.RenderDbEntityLoading(
+                        _aggregate,
                         appSrv.DbContext,
                         "beforeDbEntity",
                         searchKeys,
