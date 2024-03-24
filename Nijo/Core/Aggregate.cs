@@ -156,6 +156,28 @@ namespace Nijo.Core {
         }
 
         /// <summary>
+        /// この集約が参照する集約、およびその参照先の祖先を列挙する
+        /// </summary>
+        internal static IEnumerable<GraphNode<Aggregate>> GetRefsAndTheirAncestorsRecursively(this GraphNode<Aggregate> aggregate) {
+            IEnumerable<GraphNode<Aggregate>> Enumerate(GraphNode<Aggregate> agg) {
+                foreach (var member in agg.GetMembers()) {
+                    if (member is AggregateMember.Ref refMember) {
+                        yield return refMember.MemberAggregate;
+                        foreach (var item in Enumerate(refMember.MemberAggregate)) {
+                            yield return item;
+                        }
+                    } else if (member is AggregateMember.Parent parent && !agg.IsInTreeOf(aggregate)) {
+                        yield return parent.MemberAggregate;
+                        foreach (var item in Enumerate(parent.MemberAggregate)) {
+                            yield return item;
+                        }
+                    }
+                }
+            }
+            return Enumerate(aggregate);
+        }
+
+        /// <summary>
         /// この集約に対するRefを持っている集約を列挙する。
         /// </summary>
         internal static IEnumerable<GraphEdge<Aggregate>> GetReferedEdges(this GraphNode<Aggregate> graphNode) {

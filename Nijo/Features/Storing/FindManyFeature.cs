@@ -131,8 +131,20 @@ namespace Nijo.Features.Storing {
         internal string TypeScriptConditionClass => GetConditionClassName(_aggregate);
         internal string CsharpConditionClass => GetConditionClassName(_aggregate);
 
-        private static string GetConditionClassName(GraphNode<Aggregate> agg) {
-            return $"{agg.Item.ClassName}SearchCondition";
+        private string GetConditionClassName(GraphNode<Aggregate> agg) {
+            if (agg.IsInTreeOf(_aggregate)) {
+                return $"{agg.Item.ClassName}SearchCondition";
+            } else {
+                var paths = new List<string>();
+                foreach (var edge in agg.PathFromEntry()) {
+                    var terminal = edge.Terminal.As<Aggregate>();
+                    var initial = edge.Initial.As<Aggregate>();
+                    if (terminal.IsInTreeOf(_aggregate)) continue;
+                    if (initial.IsInTreeOf(_aggregate)) paths.Add(initial.Item.ClassName);
+                    paths.Add(edge.IsParentChild() ? "Parent" : edge.RelationName);
+                }
+                return $"{paths.Join("_")}SearchCondition";
+            }
         }
         private static string GetCSharpType(AggregateMember.ValueMember vm) {
             if (vm is AggregateMember.Variation) {
@@ -270,61 +282,66 @@ namespace Nijo.Features.Storing {
                     """;
         }
 
-        internal string RenderSearchConditionCSharpDeclaring() {
+        internal string RenderSearchConditionTypeDeclaring(bool csharp) {
             var aggregates = _aggregate
-                .EnumerateThisAndDescendants();
+                .EnumerateThisAndDescendants()
+                .ToList();
+            var foreignAggregates = aggregates
+                .SelectMany(agg => agg.GetRefsAndTheirAncestorsRecursively())
+                .ToArray();
+            aggregates.AddRange(foreignAggregates);
 
             return aggregates.SelectTextTemplate(agg => {
-                var members = agg
-                    .GetMembers()
-                    .Where(m => m is AggregateMember.Parent
-                             || m.DeclaringAggregate == agg
-                             && m is not AggregateMember.Children
-                             && m is not AggregateMember.VariationItem);
-                return $$"""
-                    public class {{GetConditionClassName(agg)}} {
-                    {{members.SelectTextTemplate(m => $$"""
-                    {{If(m is AggregateMember.Variation, () => $$"""
-                    {{VariationMemberProps((AggregateMember.Variation)m).SelectTextTemplate(x => $$"""
-                        public bool? {{x.Value}} { get; set; }
-                    """)}}
-                    """).ElseIf(m is AggregateMember.ValueMember, () => $$"""
-                        public {{GetCSharpType((AggregateMember.ValueMember)m)}}? {{m.MemberName}} { get; set; }
-                    """).ElseIf(m is AggregateMember.RelationMember, () => $$"""
-                        public {{GetConditionClassName(((AggregateMember.RelationMember)m).MemberAggregate)}}? {{m.MemberName}} { get; set; } = new();
-                    """)}}
-                    """)}}
-                    }
-                    """;
-            });
-        }
+                var members = agg.GetMembers().Where(m => {
+                    if (m is AggregateMember.ValueMember
+                        && m.DeclaringAggregate == agg)
+                        return true;
 
-        internal string RenderSearchConditionTypeScriptDeclaring() {
-            var aggregates = _aggregate
-                .EnumerateThisAndDescendants();
+                    if (m is AggregateMember.Ref)
+                        return true;
 
-            return aggregates.SelectTextTemplate(agg => {
-                var members = agg
-                    .GetMembers()
-                    .Where(m => m is AggregateMember.Parent
-                             || m.DeclaringAggregate == agg
-                             && m is not AggregateMember.Children
-                             && m is not AggregateMember.VariationItem);
-                return $$"""
-                    export type {{GetConditionClassName(agg)}} = {
-                    {{members.SelectTextTemplate(m => $$"""
-                    {{If(m is AggregateMember.Variation, () => $$"""
-                    {{VariationMemberProps((AggregateMember.Variation)m).SelectTextTemplate(x => $$"""
-                      {{x.Value}}?: boolean
-                    """)}}
-                    """).ElseIf(m is AggregateMember.ValueMember, () => $$"""
-                      {{m.MemberName}}?: {{GetTypeScriptType((AggregateMember.ValueMember)m)}}
-                    """).ElseIf(m is AggregateMember.RelationMember, () => $$"""
-                      {{m.MemberName}}?: {{GetConditionClassName(((AggregateMember.RelationMember)m).MemberAggregate)}}
-                    """)}}
-                    """)}}
-                    }
-                    """;
+                    if (m is AggregateMember.Parent parent
+                        && !parent.MemberAggregate.IsInTreeOf(_aggregate))
+                        return true;
+
+                    return false;
+                });
+
+                if (csharp) {
+                    // C#
+                    return $$"""
+                        public class {{GetConditionClassName(agg)}} {
+                        {{members.SelectTextTemplate(m => $$"""
+                        {{If(m is AggregateMember.Variation, () => $$"""
+                        {{VariationMemberProps((AggregateMember.Variation)m).SelectTextTemplate(x => $$"""
+                            public bool? {{x.Value}} { get; set; }
+                        """)}}
+                        """).ElseIf(m is AggregateMember.ValueMember, () => $$"""
+                            public {{GetCSharpType((AggregateMember.ValueMember)m)}}? {{m.MemberName}} { get; set; }
+                        """).ElseIf(m is AggregateMember.RelationMember, () => $$"""
+                            public {{GetConditionClassName(((AggregateMember.RelationMember)m).MemberAggregate)}}? {{m.MemberName}} { get; set; } = new();
+                        """)}}
+                        """)}}
+                        }
+                        """;
+                } else {
+                    // TypeScript
+                    return $$"""
+                        export type {{GetConditionClassName(agg)}} = {
+                        {{members.SelectTextTemplate(m => $$"""
+                        {{If(m is AggregateMember.Variation, () => $$"""
+                        {{VariationMemberProps((AggregateMember.Variation)m).SelectTextTemplate(x => $$"""
+                          {{x.Value}}?: boolean
+                        """)}}
+                        """).ElseIf(m is AggregateMember.ValueMember, () => $$"""
+                          {{m.MemberName}}?: {{GetTypeScriptType((AggregateMember.ValueMember)m)}}
+                        """).ElseIf(m is AggregateMember.RelationMember, () => $$"""
+                          {{m.MemberName}}?: {{GetConditionClassName(((AggregateMember.RelationMember)m).MemberAggregate)}}
+                        """)}}
+                        """)}}
+                        }
+                        """;
+                }
             });
         }
         #endregion 絞り込み
