@@ -194,7 +194,8 @@ export const LocalReposChangeListPage = () => {
 }
 const CHANGE_LIST_COLS: Collection.ColumnDefEx<Tree.TreeNode<LocalRepositoryItemListItem>>[] = [
   { id: 'col0', header: '状態', accessorFn: x => x.item.state, size: 12 },
-  { id: 'col1', header: '名前', accessorFn: x => x.item.itemName },
+  { id: 'col1', header: '種類', accessorFn: x => x.item.dataTypeKey },
+  { id: 'col2', header: '名前', accessorFn: x => x.item.itemName },
 ]
 // -------------------------------------------------
 // 特定の集約の変更
