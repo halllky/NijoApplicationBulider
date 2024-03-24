@@ -119,6 +119,9 @@ namespace Nijo.Core {
                 && (string)groupName != string.Empty;
         }
 
+        /// <summary>
+        /// この集約がDBに保存されるものかどうかを返します。
+        /// </summary>
         internal static bool IsStored(this GraphNode<Aggregate> aggregate) {
             var handler = aggregate.GetRoot().Item.Options.Handler;
             return handler == NijoCodeGenerator.Models.WriteModel.Key
@@ -126,9 +129,9 @@ namespace Nijo.Core {
         }
 
         /// <summary>
-        /// このReadModelが依存する集約を列挙する
+        /// このReadModelが依存するWriteModel（スキーマ定義で依存があると指定されているもの）を列挙する
         /// </summary>
-        internal static IEnumerable<GraphNode<Aggregate>> GetDependency(this GraphNode<Aggregate> readModel) {
+        internal static IEnumerable<GraphNode<Aggregate>> GetDependsOnMarkedWriteModels(this GraphNode<Aggregate> readModel) {
             if (readModel.Item.Options.Handler != NijoCodeGenerator.Models.ReadModel.Key)
                 throw new InvalidOperationException($"{readModel.Item} is not a read model.");
 
@@ -139,9 +142,9 @@ namespace Nijo.Core {
             }
         }
         /// <summary>
-        /// このWriteModelに依存する集約を列挙する
+        /// このWriteModelに依存するReadModel（スキーマ定義で依存があると指定されているもの）を列挙する
         /// </summary>
-        internal static IEnumerable<GraphNode<Aggregate>> GetDependents(this GraphNode<Aggregate> writeModel) {
+        internal static IEnumerable<GraphNode<Aggregate>> GetDependsOnMarkedReadModels(this GraphNode<Aggregate> writeModel) {
             if (writeModel.Item.Options.Handler != NijoCodeGenerator.Models.WriteModel.Key)
                 throw new InvalidOperationException($"{writeModel.Item} is not a write model.");
 
@@ -152,6 +155,9 @@ namespace Nijo.Core {
             }
         }
 
+        /// <summary>
+        /// この集約に対するRefを持っている集約を列挙する。
+        /// </summary>
         internal static IEnumerable<GraphEdge<Aggregate>> GetReferedEdges(this GraphNode<Aggregate> graphNode) {
             return graphNode.In
                 .Where(edge => edge.Attributes.TryGetValue(REL_ATTR_RELATION_TYPE, out var type)

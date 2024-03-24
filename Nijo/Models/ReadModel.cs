@@ -68,7 +68,7 @@ namespace Nijo.Models {
                 // - ReadModelの主キーが必ずしもWriteModelの集約1種類へのRefのみで構成されるとは限らない
                 var entity = $"{rootAggregate.Item.EFCoreEntityClassName}?";
                 var dependencies = rootAggregate
-                    .GetDependency()
+                    .GetDependsOnMarkedWriteModels()
                     .Select(writeModel => writeModel.GetRoot())
                     .Distinct();
 

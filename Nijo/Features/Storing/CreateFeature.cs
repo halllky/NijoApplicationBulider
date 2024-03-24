@@ -76,7 +76,7 @@ namespace Nijo.Features.Storing {
                     var updateEvent = new AggregateUpdateEvent<{{instanceClass}}> {
                         Created = new[] { afterUpdate },
                     };
-                    {{_aggregate.GetDependents().SelectTextTemplate(readModel => $$"""
+                    {{_aggregate.GetDependsOnMarkedReadModels().SelectTextTemplate(readModel => $$"""
                     {{WithIndent(ReadModel.RenderUpdateCalling(readModel, "updateEvent"), "    ")}}
                     """)}}
 

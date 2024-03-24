@@ -73,7 +73,7 @@ namespace Nijo.Features.Storing {
                     var updateEvent = new AggregateUpdateEvent<{{instanceClass}}> {
                         Deleted = new[] { deleted },
                     };
-                    {{_aggregate.GetDependents().SelectTextTemplate(readModel => $$"""
+                    {{_aggregate.GetDependsOnMarkedReadModels().SelectTextTemplate(readModel => $$"""
                     {{WithIndent(ReadModel.RenderUpdateCalling(readModel, "updateEvent"), "    ")}}
                     """)}}
 
