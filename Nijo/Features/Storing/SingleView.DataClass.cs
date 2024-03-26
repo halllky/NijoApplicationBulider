@@ -28,62 +28,84 @@ namespace Nijo.Features.Storing {
         /// </summary>
         internal const string OBJECT_ID = "__object_id";
 
-        internal static string RenderTypeScriptDataClassDeclaration(GraphNode<Aggregate> rootAggregate) {
-            if (!rootAggregate.IsRoot()) throw new InvalidOperationException();
+        internal string RootPropName => _aggregate.Item.ClassName;
 
-            return rootAggregate.EnumerateThisAndDescendants().SelectTextTemplate(aggregate => {
-                var ownMembers = aggregate
-                    .GetMembers()
-                    .Where(m => m.DeclaringAggregate == aggregate);
-                var refered = aggregate
-                    .GetReferedEdgesAsSingleKey();
-
-                return $$"""
-                    export type {{new SingleViewDataClass(aggregate).Name}} = {
-                    {{ownMembers.SelectTextTemplate(m => $$"""
-                      {{m.MemberName}}?: {{m.TypeScriptTypename}}
-                    """)}}
-                    {{refered.SelectTextTemplate(edge => $$"""
-                      {{edge.RelationName}}?: {{new SingleViewDataClass(edge.Initial).Name}}
-                    """)}}
-                      {{IS_LOADED}}?: boolean
-                      {{OBJECT_ID}}?: string
-                    }
-                    """;
-            });
+        internal IEnumerable<Prop> GetProps() {
+            return _aggregate
+                .EnumerateThisAndDescendants()
+                .SelectMany(agg => agg.GetReferedEdgesAsSingleKeyRecursively())
+                // TODO: 本当はDistinctを使いたいがAggregateの同一性判断にSourceが入っていない
+                .GroupBy(relation => new { agg = relation.Initial.GetRoot(), relation })
+                .Select(group => new Prop(_aggregate, group.Key.agg));
         }
-        internal static string RenderCSharpDataClassDeclaration(GraphNode<Aggregate> rootAggregate) {
-            if (!rootAggregate.IsRoot()) throw new InvalidOperationException();
 
-            return rootAggregate.EnumerateThisAndDescendants().SelectTextTemplate(aggregate => {
-                var ownMembers = aggregate
-                    .GetMembers()
-                    .Where(m => m.DeclaringAggregate == aggregate);
-                var refered = aggregate
-                    .GetReferedEdgesAsSingleKey();
+        internal string RenderTypeScriptDataClassDeclaration() {
+            return $$"""
+                type {{Name}} = {
+                  {{RootPropName}}?: {{_aggregate.Item.TypeScriptTypeName}}
+                {{GetProps().SelectTextTemplate(p => $$"""
+                  {{p.PropName}}?: {{(p.IsArray ? $"{p.RefTarget.Item.TypeScriptTypeName}[]" : p.RefTarget.Item.TypeScriptTypeName)}}
+                """)}}
+                }
+                """;
+        }
+        internal string RenderCSharpDataClassDeclaration() {
+            return $$"""
+                public partial class {{Name}} {
+                    public {{_aggregate.Item.ClassName}}? {{RootPropName}} { get; set; }
+                {{GetProps().SelectTextTemplate(p => $$"""
+                    public {{(p.IsArray ? $"List<{p.RefTarget.Item.ClassName}>?" : $"{p.RefTarget.Item.ClassName}?")}} {{p.PropName}} { get; set; }
+                """)}}
+                }
+                """;
+        }
 
-                return $$"""
-                    /// <summary>
-                    /// {{aggregate.Item.DisplayName}}の詳細画面のデータ構造です。
-                    /// </summary>
-                    public partial class {{new SingleViewDataClass(aggregate).Name}} {
-                    {{ownMembers.SelectTextTemplate(m => $$"""
-                    {{If(m is AggregateMember.Child, () => $$"""
-                        public virtual {{new SingleViewDataClass(((AggregateMember.Child)m).MemberAggregate).Name}}? {{m.MemberName}} { get; set; }
-                    """).ElseIf(m is AggregateMember.VariationItem, () => $$"""
-                        public virtual {{new SingleViewDataClass(((AggregateMember.VariationItem)m).MemberAggregate).Name}}? {{m.MemberName}} { get; set; }
-                    """).ElseIf(m is AggregateMember.Children, () => $$"""
-                        public virtual List<{{new SingleViewDataClass(((AggregateMember.Children)m).MemberAggregate).Name}}>? {{m.MemberName}} { get; set; }
-                    """).Else(() => $$"""
-                        public virtual {{m.CSharpTypeName}}? {{m.MemberName}} { get; set; }
-                    """)}}
-                    """)}}
-                    {{refered.SelectTextTemplate(edge => $$"""
-                        public virtual {{new SingleViewDataClass(edge.Initial).Name}}? {{edge.RelationName}} { get; set; }
-                    """)}}
+        internal class Prop {
+            internal Prop(GraphNode<Aggregate> root, GraphNode<Aggregate> refTarget) {
+                _root = root;
+                RefTarget = refTarget;
+            }
+            private readonly GraphNode<Aggregate> _root;
+            internal GraphNode<Aggregate> RefTarget { get; }
+
+            /// <summary>
+            /// 従属集約が保管されるプロパティの名前を返します
+            /// </summary>
+            internal string PropName {
+                get {
+                    if (RefTarget.Source == null || RefTarget.Source.IsParentChild()) {
+                        return RefTarget.Item.ClassName;
+
+                    } else {
+                        return $"{RefTarget.Source.RelationName.ToCSharpSafe()}_{RefTarget.Item.ClassName}";
                     }
-                    """;
-            });
+                }
+            }
+            /// <summary>
+            /// 主たる集約またはそれと1対1の多重度にある集約であればfalse
+            /// </summary>
+            internal bool IsArray {
+                get {
+                    foreach (var edge in RefTarget.PathFromEntry()) {
+                        var initial = edge.Initial.As<Aggregate>();
+                        var terminal = edge.Terminal.As<Aggregate>();
+
+                        // 経路の途中にChildrenが含まれるならば多重度:多
+                        if (terminal.IsChildrenMember()
+                            && terminal.GetParent() == edge.As<Aggregate>()) {
+                            return true;
+                        }
+
+                        // 経路の途中に主キーでないRefが含まれるならば多重度:多
+                        if (edge.IsRef()
+                            && !terminal.IsSingleRefKeyOf(initial)) {
+                            return true;
+                        }
+                    }
+
+                    return false;
+                }
+            }
         }
     }
 }

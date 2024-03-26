@@ -49,6 +49,8 @@ namespace Nijo.Features.Storing {
                 {{GetOwnMembers().SelectTextTemplate(m => $$"""
                   {{m.MemberName}}?: {{m.TypeScriptTypename}}
                 """)}}
+                  {{SingleViewDataClass.IS_LOADED}}?: boolean
+                  {{SingleViewDataClass.OBJECT_ID}}?: string
                 }
                 """;
         }

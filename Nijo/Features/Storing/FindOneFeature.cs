@@ -30,7 +30,8 @@ namespace Nijo.Features.Storing {
 
         internal string RenderController() {
             var appSrv = new ApplicationService();
-            var dataClass = new SingleViewDataClass(_aggregate).Name;
+            var detail = new AggregateDetail(_aggregate);
+            var dataClass = new SingleViewDataClass(_aggregate);
             var keys = _aggregate
                 .GetKeys()
                 .OfType<AggregateMember.ValueMember>()
@@ -48,7 +49,7 @@ namespace Nijo.Features.Storing {
 
             return $$"""
                 [HttpGet("{{ACTION_NAME}}/{{keys.Select(m => "{" + m.MemberName + "}").Join("/")}}")]
-                public virtual IActionResult Find({{keys.Select(m => $"{m.CSharpTypeName}? {m.MemberName}").Join(", ")}}) {
+                public virtual IActionResult FindOne({{keys.Select(m => $"{m.CSharpTypeName}? {m.MemberName}").Join(", ")}}) {
                 {{keys.SelectTextTemplate(m => $$"""
                     if ({{m.MemberName}} == null) return BadRequest();
                 """)}}
@@ -64,18 +65,20 @@ namespace Nijo.Features.Storing {
                     if (entity == null) {
                         return NotFound();
                     }
-                    var instance = new {{dataClass}} {
-                        {{WithIndent(AggregateDetail.RenderBodyOfFromDbEntity(
-                            _aggregate,
-                            _aggregate,
-                            "entity",
-                            0,
-                            agg => $"new {new SingleViewDataClass(agg).Name}()"), "        ")}}
+                    var instance = new {{dataClass.Name}} {
+                        {{dataClass.RootPropName}} = new {{detail.ClassName}} {
+                            {{WithIndent(AggregateDetail.RenderBodyOfFromDbEntity(
+                                _aggregate,
+                                _aggregate,
+                                "entity",
+                                0,
+                                null /*agg => $"new {new SingleViewDataClass(agg).Name}()"*/), "            ")}}
+                        },
                     };
-                {{singleRelevants.SelectTextTemplate((rel, ix) => $$"""
+                {{dataClass.GetProps().SelectTextTemplate((p, ix) => $$"""
 
                     {{WithIndent(FindFeature.RenderDbEntityLoading(
-                        rel.Initial.AsEntry(),
+                        p.RefTarget.AsEntry(),
                         $"_applicationService.{appSrv.DbContext}",
                         $"entity{ix}",
                         keys.Select(a => a.MemberName).ToArray(),
@@ -83,13 +86,13 @@ namespace Nijo.Features.Storing {
                         includeRefs: true), "    ")}}
 
                     if (entity{{ix}} != null) {
-                        instance.{{rel.Initial.PathFromEntry().Select(p => p.RelationName).Join(".")}} = new {{new SingleViewDataClass(rel.Initial).Name}} {
+                        instance.{{p.PropName}} = new {{new AggregateDetail(p.RefTarget).ClassName}} {
                             {{WithIndent(AggregateDetail.RenderBodyOfFromDbEntity(
-                                rel.Initial.AsEntry(),
-                                rel.Initial.AsEntry(),
+                                p.RefTarget.AsEntry(),
+                                p.RefTarget.AsEntry(),
                                 $"entity{ix}",
                                 0,
-                                agg => $"new {new SingleViewDataClass(agg).Name}()"), "        ")}}
+                                null /*agg => $"new {new SingleViewDataClass(agg).Name}()"*/), "            ")}}
                         };
                     }
                 """)}}

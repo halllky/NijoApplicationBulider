@@ -106,8 +106,9 @@ namespace Nijo.Models {
                 }
 
                 // SingleView
-                builder.DataClassDeclaring.Add(SingleViewDataClass.RenderCSharpDataClassDeclaration(rootAggregate));
-                builder.TypeScriptDataTypes.Add(SingleViewDataClass.RenderTypeScriptDataClassDeclaration(rootAggregate));
+                var singleViewDataClass = new SingleViewDataClass(rootAggregate);
+                builder.DataClassDeclaring.Add(singleViewDataClass.RenderCSharpDataClassDeclaration());
+                builder.TypeScriptDataTypes.Add(singleViewDataClass.RenderTypeScriptDataClassDeclaration());
             });
 
             var editableMultiView = new MultiViewEditable(rootAggregate);

@@ -187,25 +187,33 @@ namespace Nijo.Core {
                             && edge.Initial.Item is Aggregate)
                 .Select(edge => edge.As<Aggregate>());
         }
+
+        /// <summary>
+        /// targetがsourceの唯一のキーであるか否か
+        /// </summary>
+        /// <param name="refTo">参照先</param>
+        /// <param name="refFrom">参照元</param>
+        internal static bool IsSingleRefKeyOf(this GraphNode<Aggregate> refTo, GraphNode<Aggregate> refFrom) {
+            var keys = refFrom
+                .GetKeys()
+                .Where(key => key.DeclaringAggregate == refFrom)
+                .ToArray();
+
+            if (refFrom.Item.Options.Handler == NijoCodeGenerator.Models.WriteModel.Key
+                && keys.Length == 1
+                && keys[0] is AggregateMember.Ref rm
+                && rm.MemberAggregate == refTo) {
+                return true;
+            }
+            return false;
+        }
         /// <summary>
         /// この集約を参照し、かつそれが参照元集約の唯一のキーであるものを列挙する。
         /// </summary>
         internal static IEnumerable<GraphEdge<Aggregate>> GetReferedEdgesAsSingleKey(this GraphNode<Aggregate> target) {
-            var refered = target.GetReferedEdges();
-            foreach (var edge in refered) {
-                var source = edge.Initial;
-                var keys = source
-                    .GetKeys()
-                    .Where(key => key.DeclaringAggregate == source)
-                    .ToArray();
-
-                if (source.Item.Options.Handler == NijoCodeGenerator.Models.WriteModel.Key
-                    && keys.Length == 1
-                    && keys[0] is AggregateMember.Ref rm
-                    && rm.MemberAggregate == target) {
-                    yield return edge;
-                }
-            }
+            return target
+                .GetReferedEdges()
+                .Where(edge => target.IsSingleRefKeyOf(edge.Initial));
         }
         /// <summary>
         /// この集約を参照し、かつそれが参照元集約の唯一のキーであるものを列挙する。
