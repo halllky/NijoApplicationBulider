@@ -83,8 +83,18 @@ namespace Nijo.Features.Storing {
                         $"entity{ix}",
                         keys.Select(a => a.MemberName).ToArray(),
                         tracks: false,
-                        includeRefs: true), "    ")}}
+                        includeRefs: true,
+                        single: !p.IsArray), "    ")}}
 
+                {{If(p.IsArray, () => $$"""
+                    instance.{{p.PropName}} = entity{{ix}}.Select(x => new {{new AggregateDetail(p.RefTarget).ClassName}} {
+                        {{WithIndent(AggregateDetail.RenderBodyOfFromDbEntity(
+                            p.RefTarget.AsEntry(),
+                            p.RefTarget.AsEntry(),
+                            "x",
+                            0), "        ")}}
+                    }).ToList();
+                """).Else(() => $$"""
                     if (entity{{ix}} != null) {
                         instance.{{p.PropName}} = new {{new AggregateDetail(p.RefTarget).ClassName}} {
                             {{WithIndent(AggregateDetail.RenderBodyOfFromDbEntity(
@@ -95,6 +105,7 @@ namespace Nijo.Features.Storing {
                                 null /*agg => $"new {new SingleViewDataClass(agg).Name}()"*/), "            ")}}
                         };
                     }
+                """)}}
                 """)}}
 
                     return this.JsonContent(instance);

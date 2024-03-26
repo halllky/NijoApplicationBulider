@@ -63,7 +63,8 @@ namespace Nijo.Features.Storing {
             string entityVarName,
             IList<string> searchKeys,
             bool tracks,
-            bool includeRefs) {
+            bool includeRefs,
+            bool single = true) {
 
             // Include
             var includeEntities = rootAggregate
@@ -92,11 +93,14 @@ namespace Nijo.Features.Storing {
                     return new { source, prop };
                 });
 
-            // SingleOrDefault
+            // SingleOrDefaultならキーの数は固定、Whereならキーの数は少なくても可
             var keys = rootAggregate
                 .GetKeys()
                 .Where(m => m is AggregateMember.ValueMember)
-                .SelectTextTemplate((m, i) => $"x.{m.GetFullPath().Join(".")} == {searchKeys.ElementAtOrDefault(i)}");
+                .ToArray();
+            var whereClause = single
+                ? keys.SelectTextTemplate((m, i) => $"x.{m.GetFullPath().Join(".")} == {searchKeys.ElementAtOrDefault(i)}")
+                : searchKeys.SelectTextTemplate((searchKey, i) => $"x.{keys[i].GetFullPath().Join(".")} == {searchKey}");
 
             return $$"""
                 var {{entityVarName}} = {{dbContextVarName}}.{{rootAggregate.Item.DbSetName}}
@@ -108,7 +112,12 @@ namespace Nijo.Features.Storing {
                 """ : $$"""
                     .ThenInclude(x => x.{{path.prop}})
                 """)}}
-                    .SingleOrDefault(x => {{WithIndent(keys, "                       && ")}});
+                {{If(single, () => $$"""
+                    .SingleOrDefault(x => {{WithIndent(whereClause, "                       && ")}});
+                """).Else(() => $$"""
+                    .Where(x => {{WithIndent(whereClause, "             && ")}})
+                    .AsEnumerable();
+                """)}}
                 """;
         }
     }
